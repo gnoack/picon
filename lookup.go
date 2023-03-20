@@ -73,6 +73,18 @@ func getDBs() []string {
 		dbs, err := os.ReadDir(base)
 		if os.IsNotExist(err) {
 			continue
+		} else if os.IsPermission(err) {
+			// Potential Landlock eCryptfs issue, see
+			// https://lore.kernel.org/linux-security-module/c1c9c688-c64d-adf2-cc96-dc2aaaae5944@digikod.net/
+			//
+			// Let's assume the default iteration order
+			// https://kinzler.com/picons/ftp/faq.html#lookup
+			for _, e := range []string{
+				"local", "users", "usenix", "misc", "domains", "unknown",
+			} {
+				res = append(res, filepath.Join(base, e))
+			}
+			continue
 		} else if err != nil {
 			return nil
 		}
