@@ -64,36 +64,63 @@ func parseAddress(email string) ([]string, error) {
 	return append(reverse(strings.Split(domain, ".")), n), nil
 }
 
+// orderedSubdirs is the default subdirectory iteration order;
+// compare https://kinzler.com/picons/ftp/faq.html#lookup
+var orderedSubdirs = []string{
+	"local", "users", "usenix", "misc", "domains", "unknown",
+}
+
+func isWellKnownSubdir(name string) bool {
+	for _, o := range orderedSubdirs {
+		if name == o {
+			return true
+		}
+	}
+	return false
+}
+
+func orderedSubdirNames(baseDir string) []string {
+	var res []string
+
+	dbs, err := os.ReadDir(baseDir)
+	switch {
+	case os.IsNotExist(err):
+		return nil
+	case os.IsPermission(err):
+		// Workaround for Landlock eCryptfs issue, see
+		// https://lore.kernel.org/linux-security-module/c1c9c688-c64d-adf2-cc96-dc2aaaae5944@digikod.net/
+		// We can not list directories, but we can access them directly,
+		// so as a fallback we assume that the well-known subdirectories exist.
+		res = orderedSubdirs
+	case err != nil:
+		return nil
+	default:
+		for _, e := range dbs {
+			if !e.IsDir() {
+				continue
+			}
+			// Well-known subdirs are appended last.
+			if isWellKnownSubdir(e.Name()) {
+				continue
+			}
+			res = append(res, e.Name())
+		}
+		res = append(res, orderedSubdirs...)
+	}
+
+	for i, r := range res {
+		res[i] = filepath.Join(baseDir, r)
+	}
+	return res
+}
+
 func getDBs() []string {
 	var res []string
 	for _, base := range []string{
 		"/usr/share/picons", // where it's installed on Debian
 		filepath.Join(os.Getenv("HOME"), ".picons"),
 	} {
-		dbs, err := os.ReadDir(base)
-		if os.IsNotExist(err) {
-			continue
-		} else if os.IsPermission(err) {
-			// Potential Landlock eCryptfs issue, see
-			// https://lore.kernel.org/linux-security-module/c1c9c688-c64d-adf2-cc96-dc2aaaae5944@digikod.net/
-			//
-			// Let's assume the default iteration order
-			// https://kinzler.com/picons/ftp/faq.html#lookup
-			for _, e := range []string{
-				"local", "users", "usenix", "misc", "domains", "unknown",
-			} {
-				res = append(res, filepath.Join(base, e))
-			}
-			continue
-		} else if err != nil {
-			return nil
-		}
-		for _, e := range dbs {
-			if !e.IsDir() {
-				continue
-			}
-			res = append(res, filepath.Join(base, e.Name()))
-		}
+		res = append(res, orderedSubdirNames(base)...)
 	}
 	return res
 }
