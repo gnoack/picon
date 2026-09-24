@@ -18,6 +18,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -71,12 +72,7 @@ var orderedSubdirs = []string{
 }
 
 func isWellKnownSubdir(name string) bool {
-	for _, o := range orderedSubdirs {
-		if name == o {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(orderedSubdirs, name)
 }
 
 func orderedSubdirNames(baseDir string) []string {
